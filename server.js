@@ -3,6 +3,24 @@ const path=require("path");
 const app=express();
 const PORT=process.env.PORT||3000;
 const cache=new Map();
+const RETAILER_INFO={
+  "Fanatical":{source:"official",type:"Authorized retailer"},
+  "GreenManGaming":{source:"official",type:"Authorized retailer"},
+  "Green Man Gaming":{source:"official",type:"Authorized retailer"},
+  "Humble Store":{source:"official",type:"Authorized retailer"},
+  "Humble Bundle":{source:"official",type:"Authorized retailer"},
+  "Gamesplanet":{source:"official",type:"Authorized retailer"},
+  "GameBillet":{source:"official",type:"Authorized retailer"},
+  "Gamebillet":{source:"official",type:"Authorized retailer"},
+  "2Game":{source:"official",type:"Authorized retailer"},
+  "GamersGate":{source:"official",type:"Authorized retailer"},
+  "DLGamer":{source:"official",type:"Authorized retailer"},
+  "IndieGala":{source:"official",type:"Authorized retailer"},
+  "Allyouplay":{source:"official",type:"Authorized retailer"},
+  "DreamGame":{source:"official",type:"Authorized retailer"},
+  "Gamesload":{source:"official",type:"Authorized retailer"}
+};
+
 const TTL=10*60*1000;
 
 app.use(express.static(path.join(__dirname,"public")));
@@ -101,8 +119,10 @@ app.get("/api/search",async(req,res)=>{
           const normal=Number.parseFloat(String(rawNormal).replace(/,/g,"")) || sale;
           const rate=Number(fx?.rates?.[currency]);
           const converted=rate>0 ? sale*rate : sale;
+          const storeName=storeMap[String(d.storeID)]||("Store "+d.storeID);
+          const info=RETAILER_INFO[storeName]||{source:"official",type:"Store"};
           return {
-            storeName:storeMap[String(d.storeID)]||("Store "+d.storeID),
+            storeName,
             storeId:d.storeID,
             convertedPrice:converted,
             salePrice:sale,
@@ -114,8 +134,8 @@ app.get("/api/search",async(req,res)=>{
             platform:"PC",
             activation:storeMap[String(d.storeID)]||"PC Store",
             verified:true,
-            source:"official",
-            type:"Official store",
+            source:info.source,
+            type:info.type,
             availability:"Available",
             stock:null
           };
