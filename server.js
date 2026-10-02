@@ -12,6 +12,64 @@ async function getJSON(url){
   if(!r.ok) throw new Error("Upstream "+r.status);
   return r.json();
 }
+async function driffleToken(){
+  const key=process.env.DRIFFLE_API_KEY;
+  if(!key) return null;
+  const r=await fetch("https://services.driffle.com/api/seller/legacy/token",{method:"POST",headers:{"Content-Type":"application/json","User-Agent":"Deals4Gamerz/1.0"},body:JSON.stringify({apiKey:key})});
+  if(!r.ok) return null;
+  const j=await r.json();
+  return j?.data?.token||null;
+}
+async function driffleSearch(q,currency,fx){
+  const token=await driffleToken();
+  if(!token) return [];
+  const r=await fetch("https://services.driffle.com/api/seller/legacy/products?searchPhrase="+encodeURIComponent(q)+"&productType=game&limit=10",{headers:{Authorization:"Bearer "+token,"User-Agent":"Deals4Gamerz/1.0"}});
+  if(!r.ok) return [];
+  const j=await r.json();
+  const products=Array.isArray(j?.data)?j.data:[];
+  const out=[];
+  for(const p of products.slice(0,5)){
+    try{
+      const cr=await fetch("https://services.driffle.com/api/seller/legacy/products/"+encodeURIComponent(p.productId)+"/competitions",{headers:{Authorization:"Bearer "+token,"User-Agent":"Deals4Gamerz/1.0"}});
+      if(!cr.ok) continue;
+      const cj=await cr.json();
+      for(const o of (cj?.competitions?.offers||[])){
+        const amount=Number(o?.price?.amount);
+        if(!(amount>0)||!o?.canBePurchased) continue;
+        const from=String(o?.price?.currency||"USD").toUpperCase();
+        let converted=amount;
+        if(from!==currency){
+          let rr;
+          if(from==="USD") rr=fx?.rates?.[currency];
+          else {
+            const local=await rates(from);
+            rr=local?.rates?.[currency];
+          }
+          if(Number(rr)>0) converted=amount*Number(rr);
+        }
+        out.push({
+          storeName:"Driffle",
+          storeId:"driffle",
+          convertedPrice:converted,
+          salePrice:amount,
+          originalPrice:amount,
+          currency:from,
+          discount:0,
+          url:"https://driffle.com/search/"+encodeURIComponent(p.title),
+          region:p.regionName||"Various",
+          platform:p.platform||"PC",
+          activation:p.platform||"Digital Key",
+          source:"marketplace",
+          type:"Game Key",
+          availability:"In stock",
+          stock:null,
+          verified:true
+        });
+      }
+    }catch{}
+  }
+  return out;
+}
 async function rates(base){
   const key="fx:"+base, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return hit.v;
@@ -26,10 +84,11 @@ app.get("/api/search",async(req,res)=>{
   const key="s:"+q.toLowerCase()+":"+currency+":"+country, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
   try{
-    const [games,fx,stores]=await Promise.all([
+    const [games,fx,stores,marketplaceDeals]=await Promise.all([
       getJSON("https://www.cheapshark.com/api/1.0/games?title="+encodeURIComponent(q)+"&limit=8"),
       rates("USD"),
-      getJSON("https://www.cheapshark.com/api/1.0/stores")
+      getJSON("https://www.cheapshark.com/api/1.0/stores"),
+      driffleSearch(q,currency,fx)
     ]);
     const storeMap=Object.fromEntries((stores||[]).map(s=>[String(s.storeID),s.storeName]));
     const detailed=await Promise.all((games||[]).slice(0,6).map(async g=>{
@@ -54,13 +113,22 @@ app.get("/api/search",async(req,res)=>{
             region:country,
             platform:"PC",
             activation:storeMap[String(d.storeID)]||"PC Store",
-            verified:true
+            verified:true,
+            source:"official",
+            type:"Official store",
+            availability:"Available",
+            stock:null
           };
         });
         return {title:detail.info?.title||g.external,cover:detail.info?.thumb||g.thumb,platform:"PC",edition:"Digital",deals};
       }catch{return null}
     }));
     const results=detailed.filter(Boolean).filter(g=>g.deals.length);
+    if(marketplaceDeals.length){
+      const first=results[0]||{title:q,cover:"",platform:"PC",edition:"Digital",deals:[]};
+      first.deals.push(...marketplaceDeals);
+      if(!results.includes(first)) results.push(first);
+    }
     const out={country,currency,results};
     cache.set(key,{t:Date.now(),v:out});
     res.json(out);
