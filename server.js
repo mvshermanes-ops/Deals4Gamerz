@@ -118,7 +118,7 @@ app.get("/api/search",async(req,res)=>{
           const sale=Number.parseFloat(String(rawSale).replace(/,/g,"")) || 0;
           const normal=Number.parseFloat(String(rawNormal).replace(/,/g,"")) || sale;
           const rate=Number(fx?.rates?.[currency]);
-          const converted=rate>0 ? sale*rate : sale;
+          const converted=rate>0 ? sale*rate : 0;
           const storeName=storeMap[String(d.storeID)]||("Store "+d.storeID);
           const info=RETAILER_INFO[storeName]||{source:"official",type:"Store"};
           return {
@@ -139,14 +139,14 @@ app.get("/api/search",async(req,res)=>{
             availability:"Available",
             stock:null
           };
-        });
+        }).filter(d=>Number(d.convertedPrice)>0 && d.url);
         return {title:detail.info?.title||g.external,cover:detail.info?.thumb||g.thumb,platform:"PC",edition:"Digital",deals};
       }catch{return null}
     }));
     const results=detailed.filter(Boolean).filter(g=>g.deals.length);
     if(marketplaceDeals.length){
       const first=results[0]||{title:q,cover:"",platform:"PC",edition:"Digital",deals:[]};
-      first.deals.push(...marketplaceDeals);
+      first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0 && d.url));
       if(!results.includes(first)) results.push(first);
     }
     const out={country,currency,results};
