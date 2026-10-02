@@ -26,26 +26,39 @@ app.get("/api/search",async(req,res)=>{
   const key="s:"+q.toLowerCase()+":"+currency+":"+country, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
   try{
-    const [games,fx]=await Promise.all([
+    const [games,fx,stores]=await Promise.all([
       getJSON("https://www.cheapshark.com/api/1.0/games?title="+encodeURIComponent(q)+"&limit=8"),
-      rates("USD")
+      rates("USD"),
+      getJSON("https://www.cheapshark.com/api/1.0/stores")
     ]);
-    const results=games.slice(0,6).map(g=>{
-      const deals=(g.deals||[]).map(d=>{
-        const sale=Number(d.salePrice||d.normalPrice||0), normal=Number(d.normalPrice||sale);
-        const converted=sale*(fx.rates?.[currency]||1);
-        return {
-          storeName:"Store "+d.storeID,storeId:d.storeID,convertedPrice:converted,
-          salePrice:sale,originalPrice:normal,currency:"USD",
-          discount:normal?Math.max(0,(1-sale/normal)*100):0,
-          url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
-          region:country,platform:"PC",activation:"PC / Store",verified:true
-        };
-      });
-      return {title:g.external,cover:g.thumb,platform:"PC",edition:"Digital",deals};
-    }).filter(g=>g.deals.length);
+    const storeMap=Object.fromEntries((stores||[]).map(s=>[String(s.storeID),s.storeName]));
+    const detailed=await Promise.all((games||[]).slice(0,6).map(async g=>{
+      try{
+        const detail=await getJSON("https://www.cheapshark.com/api/1.0/games?id="+encodeURIComponent(g.gameID));
+        const deals=(detail.deals||[]).map(d=>{
+          const sale=Number(d.salePrice||d.normalPrice||0), normal=Number(d.normalPrice||sale);
+          return {
+            storeName:storeMap[String(d.storeID)]||("Store "+d.storeID),
+            storeId:d.storeID,
+            convertedPrice:sale*(fx.rates?.[currency]||1),
+            salePrice:sale,
+            originalPrice:normal,
+            currency:"USD",
+            discount:normal?Math.max(0,(1-sale/normal)*100):0,
+            url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
+            region:country,
+            platform:"PC",
+            activation:storeMap[String(d.storeID)]||"PC Store",
+            verified:true
+          };
+        });
+        return {title:detail.info?.title||g.external,cover:detail.info?.thumb||g.thumb,platform:"PC",edition:"Digital",deals};
+      }catch{return null}
+    }));
+    const results=detailed.filter(Boolean).filter(g=>g.deals.length);
     const out={country,currency,results};
-    cache.set(key,{t:Date.now(),v:out});res.json(out);
+    cache.set(key,{t:Date.now(),v:out});
+    res.json(out);
   }catch(e){console.error(e);res.status(502).json({error:"Live deal provider unavailable"});}
 });
 app.get("/health",(req,res)=>res.json({ok:true,name:"Deals4Gamerz"}));
