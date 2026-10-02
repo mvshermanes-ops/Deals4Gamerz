@@ -106,51 +106,67 @@ app.get("/api/search",async(req,res)=>{
   const key="s:"+q.toLowerCase()+":"+currency+":"+country, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
   try{
-    const games=await getJSON("https://www.cheapshark.com/api/1.0/games?title="+encodeURIComponent(q)+"&limit=8");
+    // One CheapShark deals request is enough to get live prices for the search.
+    // This avoids the old N+1 game-detail requests that could trigger rate limits.
+    const deals=await getJSON(
+      "https://www.cheapshark.com/api/1.0/deals?title="+encodeURIComponent(q)+"&pageSize=60&sortBy=Price&desc=0"
+    );
     const fx=await rates("USD").catch(()=>({rates:{USD:1}}));
     const stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]);
-    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
     const storeMap=Object.fromEntries((stores||[]).map(s=>[String(s.storeID),s.storeName]));
-    const detailed=await Promise.all((games||[]).slice(0,6).map(async g=>{
-      try{
-        const detail=await getJSON("https://www.cheapshark.com/api/1.0/games?id="+encodeURIComponent(g.gameID));
-        const deals=(detail.deals||[]).map(d=>{
-          const rawSale=d.salePrice ?? d.price ?? d.sale_price ?? d.normalPrice ?? d.normal_price ?? 0;
-          const rawNormal=d.normalPrice ?? d.retailPrice ?? d.normal_price ?? rawSale;
-          const sale=Number.parseFloat(String(rawSale).replace(/,/g,"")) || 0;
-          const normal=Number.parseFloat(String(rawNormal).replace(/,/g,"")) || sale;
-          const rate=Number(fx?.rates?.[currency]);
-          const converted=rate>0 ? sale*rate : 0;
-          const storeName=storeMap[String(d.storeID)]||("Store "+d.storeID);
-          const info=RETAILER_INFO[storeName]||{source:"official",type:"Store"};
-          return {
-            storeName,
-            storeId:d.storeID,
-            convertedPrice:converted,
-            salePrice:sale,
-            originalPrice:normal,
-            currency:"USD",
-            discount:normal?Math.max(0,(1-sale/normal)*100):0,
-            url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
-            region:country,
-            platform:"PC",
-            activation:storeMap[String(d.storeID)]||"PC Store",
-            verified:true,
-            source:info.source,
-            type:info.type,
-            availability:"Available",
-            stock:null
-          };
-        }).filter(d=>Number(d.convertedPrice)>0 && d.url);
-        return {title:detail.info?.title||g.external,cover:detail.info?.thumb||g.thumb,platform:"PC",edition:"Digital",deals};
-      }catch{return null}
-    }));
-    const results=detailed.filter(Boolean).filter(g=>g.deals.length);
-    if(marketplaceDeals.length){
-      const first=results[0]||{title:q,cover:"",platform:"PC",edition:"Digital",deals:[]};
-      first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0 && d.url));
-      if(!results.includes(first)) results.push(first);
+    const groups=new Map();
+
+    for(const d of (Array.isArray(deals)?deals:[])){
+      const sale=Number.parseFloat(String(d.salePrice??"").replace(/,/g,""));
+      const normal=Number.parseFloat(String(d.normalPrice??"").replace(/,/g,""));
+      const rate=Number(fx?.rates?.[currency]);
+      const converted=Number.isFinite(sale)&&sale>0&&rate>0 ? sale*rate : 0;
+      if(!(converted>0)||!d.dealID) continue;
+
+      const storeName=storeMap[String(d.storeID)]||("Store "+d.storeID);
+      const info=RETAILER_INFO[storeName]||{source:"official",type:"Store"};
+      const deal={
+        storeName,
+        storeId:d.storeID,
+        convertedPrice:converted,
+        salePrice:sale,
+        originalPrice:Number.isFinite(normal)&&normal>0?normal:sale,
+        currency:"USD",
+        discount:Number.parseFloat(d.savings)||0,
+        url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
+        region:country,
+        platform:"PC",
+        activation:storeName,
+        verified:true,
+        source:info.source,
+        type:info.type,
+        availability:"Available",
+        stock:null
+      };
+
+      const groupKey=String(d.gameID||d.internalName||d.title);
+      if(!groups.has(groupKey)){
+        groups.set(groupKey,{
+          title:d.title||q,
+          cover:d.thumb||"",
+          platform:"PC",
+          edition:"Digital",
+          deals:[]
+        });
+      }
+      groups.get(groupKey).deals.push(deal);
     }
+
+    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
+    if(marketplaceDeals.length){
+      const first=groups.values().next().value;
+      if(first) first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0&&d.url));
+    }
+
+    const results=[...groups.values()]
+      .map(g=>({...g,deals:g.deals.filter(d=>Number(d.convertedPrice)>0&&d.url)}))
+      .filter(g=>g.deals.length);
+
     const out={country,currency,results};
     cache.set(key,{t:Date.now(),v:out});
     res.json(out);
