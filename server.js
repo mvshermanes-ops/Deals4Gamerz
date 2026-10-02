@@ -26,9 +26,13 @@ const TTL=10*60*1000;
 app.use(express.static(path.join(__dirname,"public")));
 
 async function getJSON(url){
-  const r=await fetch(url,{headers:{"User-Agent":"Deals4Gamerz/1.0"}});
-  if(!r.ok) throw new Error("Upstream "+r.status);
-  return r.json();
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),12000);
+  try{
+    const r=await fetch(url,{headers:{"User-Agent":"Deals4Gamerz/1.0 (live game deal comparison)"},signal:controller.signal});
+    if(!r.ok) throw new Error("Upstream "+r.status);
+    return await r.json();
+  }finally{clearTimeout(timer)}
 }
 async function driffleToken(){
   const key=process.env.DRIFFLE_API_KEY;
@@ -102,12 +106,10 @@ app.get("/api/search",async(req,res)=>{
   const key="s:"+q.toLowerCase()+":"+currency+":"+country, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
   try{
-    const [games,fx,stores,marketplaceDeals]=await Promise.all([
-      getJSON("https://www.cheapshark.com/api/1.0/games?title="+encodeURIComponent(q)+"&limit=8"),
-      rates("USD"),
-      getJSON("https://www.cheapshark.com/api/1.0/stores"),
-      driffleSearch(q,currency,fx)
-    ]);
+    const games=await getJSON("https://www.cheapshark.com/api/1.0/games?title="+encodeURIComponent(q)+"&limit=8");
+    const fx=await rates("USD").catch(()=>({rates:{USD:1}}));
+    const stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]);
+    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
     const storeMap=Object.fromEntries((stores||[]).map(s=>[String(s.storeID),s.storeName]));
     const detailed=await Promise.all((games||[]).slice(0,6).map(async g=>{
       try{
@@ -152,7 +154,10 @@ app.get("/api/search",async(req,res)=>{
     const out={country,currency,results};
     cache.set(key,{t:Date.now(),v:out});
     res.json(out);
-  }catch(e){console.error(e);res.status(502).json({error:"Live deal provider unavailable"});}
+  }catch(e){
+    console.error("Deals4Gamerz search error:",e);
+    res.status(502).json({error:"Live deal provider unavailable",details:e?.message||"Unknown upstream error"});
+  }
 });
 app.get("/health",(req,res)=>res.json({ok:true,name:"Deals4Gamerz"}));
 app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
