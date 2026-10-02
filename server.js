@@ -36,11 +36,16 @@ app.get("/api/search",async(req,res)=>{
       try{
         const detail=await getJSON("https://www.cheapshark.com/api/1.0/games?id="+encodeURIComponent(g.gameID));
         const deals=(detail.deals||[]).map(d=>{
-          const sale=Number(d.salePrice||d.normalPrice||0), normal=Number(d.normalPrice||sale);
+          const rawSale=d.salePrice ?? d.price ?? d.sale_price ?? d.normalPrice ?? d.normal_price ?? 0;
+          const rawNormal=d.normalPrice ?? d.retailPrice ?? d.normal_price ?? rawSale;
+          const sale=Number.parseFloat(String(rawSale).replace(/,/g,"")) || 0;
+          const normal=Number.parseFloat(String(rawNormal).replace(/,/g,"")) || sale;
+          const rate=Number(fx?.rates?.[currency]);
+          const converted=rate>0 ? sale*rate : sale;
           return {
             storeName:storeMap[String(d.storeID)]||("Store "+d.storeID),
             storeId:d.storeID,
-            convertedPrice:sale*(fx.rates?.[currency]||1),
+            convertedPrice:converted,
             salePrice:sale,
             originalPrice:normal,
             currency:"USD",
