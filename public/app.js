@@ -1,5 +1,5 @@
 const C={ZAR:["R","South African Rand"],USD:["$","US Dollar"],EUR:["€","Euro"],GBP:["£","British Pound"],CAD:["C$","Canadian Dollar"],AUD:["A$","Australian Dollar"],JPY:["¥","Japanese Yen"],BRL:["R$","Brazilian Real"],INR:["₹","Indian Rupee"],KRW:["₩","South Korean Won"],CHF:["CHF","Swiss Franc"],NZD:["NZ$","New Zealand Dollar"],SGD:["S$","Singapore Dollar"],HKD:["HK$","Hong Kong Dollar"],SEK:["kr","Swedish Krona"],NOK:["kr","Norwegian Krone"],DKK:["kr","Danish Krone"],PLN:["zł","Polish Zloty"],CZK:["Kč","Czech Koruna"],MXN:["MX$","Mexican Peso"],TRY:["₺","Turkish Lira"],AED:["د.إ","UAE Dirham"],SAR:["﷼","Saudi Riyal"],ILS:["₪","Israeli New Shekel"]};
-const $=id=>document.getElementById(id),cur=$("currency"),q=$("q"),out=$("results"),platform=$("platform"),activation=$("activation"),sort=$("sort"),title=$("title");
+const $=id=>document.getElementById(id),cur=$("currency"),q=$("q"),out=$("results"),platform=$("platform"),activation=$("activation"),sort=$("sort"),title=$("title");\nq.addEventListener("click",()=>q.focus());
 Object.entries(C).forEach(([k,v])=>{const o=document.createElement("option");o.value=k;o.textContent=v[0]+" "+k+" — "+v[1];cur.appendChild(o)});
 cur.value=localStorage.d4g_currency||"ZAR";let data=[];
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
