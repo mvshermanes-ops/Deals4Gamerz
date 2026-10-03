@@ -3,6 +3,8 @@ const path=require("path");
 const app=express();
 const PORT=process.env.PORT||3000;
 const cache=new Map();
+const fxCache=new Map();
+const FX_TTL=60*60*1000;
 const RETAILER_INFO={
   "Fanatical":{source:"official",type:"Authorized retailer"},
   "GreenManGaming":{source:"official",type:"Authorized retailer"},
@@ -72,7 +74,7 @@ async function driffleSearch(q,currency,fx){
           if(from===currency) converted=amount;
           else if(from==="USD") converted=amount*Number(fx?.rates?.[currency]||0);
           else {
-            const local=await rates(from).catch(()=>null);
+            const local=await rates(from,currency).catch(()=>null);
             converted=amount*Number(local?.rates?.[currency]||0);
           }
           if(!(converted>0)) continue;
@@ -114,7 +116,7 @@ async function steamRegionalSearch(q,region,currency){
       const amount=Number(p?.price?.final)/100;
       if(!(amount>0)||!p?.id)continue;
       const from=String(p?.price?.currency||"USD").toUpperCase();
-      const fx=from===currency?1:Number((await rates(from).catch(()=>null))?.rates?.[currency]||0);
+      const fx=from===currency?1:Number((await rates(from,currency).catch(()=>null))?.rates?.[currency]||0);
       if(!(fx>0))continue;
       out.push({
         storeName:"Steam",
@@ -144,16 +146,26 @@ async function steamRegionalSearch(q,region,currency){
   }
 }
 
-async function rates(base="USD"){
+async function rates(base="USD",quote=null){
   const b=String(base||"USD").toUpperCase();
-  if(b==="USD") return {rates:{USD:1}};
-  const r=await fetch("https://api.frankfurter.dev/v2/rates?base="+encodeURIComponent(b),{headers:{"User-Agent":"Deals4Gamerz/1.0"},signal:AbortSignal.timeout(8000)});
-  if(!r.ok) throw new Error("FX upstream "+r.status);
+  const q=quote?String(quote).toUpperCase():null;
+  if(!q&&b==="USD")return {rates:{USD:1}};
+  if(q&&b===q)return {rates:{[b]:1}};
+  const cacheKey=b+":"+String(q||"*");
+  const cached=fxCache.get(cacheKey);
+  if(cached&&Date.now()-cached.t<FX_TTL)return cached.v;
+  const url="https://api.frankfurter.dev/v2/rates?base="+encodeURIComponent(b)+(q?"&quotes="+encodeURIComponent(q):"");
+  const r=await fetch(url,{headers:{"User-Agent":"Deals4Gamerz/1.0"},signal:AbortSignal.timeout(8000)});
+  if(!r.ok)throw new Error("FX upstream "+r.status);
   const j=await r.json();
   const rows=Array.isArray(j)?j:[];
   const rates={ [b]:1 };
-  for(const row of rows){if(row?.quote&&Number.isFinite(Number(row.rate)))rates[String(row.quote).toUpperCase()]=Number(row.rate)}
-  return {rates};
+  for(const row of rows){
+    if(row?.quote&&Number.isFinite(Number(row.rate)))rates[String(row.quote).toUpperCase()]=Number(row.rate);
+  }
+  const value={rates};
+  fxCache.set(cacheKey,{t:Date.now(),v:value});
+  return value;
 }
 
 app.get("/api/search",async(req,res)=>{
@@ -168,7 +180,7 @@ app.get("/api/search",async(req,res)=>{
     const deals=await getJSON(
       "https://www.cheapshark.com/api/1.0/deals?title="+encodeURIComponent(q)+"&pageSize=60&sortBy=Price&desc=0"
     );
-    const fx=await rates("USD").catch(()=>({rates:{USD:1}}));
+    const fx=await rates("USD",currency);
     const stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]);
     const storeMap=Object.fromEntries((Array.isArray(stores)?stores:[]).map(s=>[String(s.storeID),s.storeName]));
     const groups=new Map();
