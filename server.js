@@ -36,72 +36,6 @@ async function getJSON(url){
     return await r.json();
   }finally{clearTimeout(timer)}
 }
-async function driffleToken(){
-  const key=process.env.DRIFFLE_API_KEY;
-  if(!key) return null;
-  const r=await fetch("https://services.driffle.com/api/seller/legacy/token",{
-    method:"POST",
-    headers:{"Content-Type":"application/json","User-Agent":"Deals4Gamerz/1.0"},
-    body:JSON.stringify({apiKey:key})
-  });
-  if(!r.ok) return null;
-  const j=await r.json();
-  return j?.data?.token||null;
-}
-async function driffleSearch(q,currency,fx){
-  const token=await driffleToken();
-  if(!token) return [];
-  try{
-    const url="https://services.driffle.com/api/seller/legacy/products?searchPhrase="+encodeURIComponent(q)+"&productType=game&limit=10";
-    const r=await fetch(url,{headers:{Authorization:"Bearer "+token,"User-Agent":"Deals4Gamerz/1.0"}});
-    if(!r.ok) return [];
-    const j=await r.json();
-    const products=Array.isArray(j?.data)?j.data:[];
-    const out=[];
-    for(const p of products.slice(0,5)){
-      try{
-        const cr=await fetch(
-          "https://services.driffle.com/api/seller/legacy/products/"+encodeURIComponent(p.productId)+"/competitions",
-          {headers:{Authorization:"Bearer "+token,"User-Agent":"Deals4Gamerz/1.0"}}
-        );
-        if(!cr.ok) continue;
-        const cj=await cr.json();
-        for(const o of (cj?.competitions?.offers||[])){
-          const amount=Number(o?.price?.amount);
-          if(!(amount>0)||o?.canBePurchased!==true||o?.isInStock===false) continue;
-          const from=String(o?.price?.currency||"USD").toUpperCase();
-          let converted=0;
-          if(from===currency) converted=amount;
-          else if(from==="USD") converted=amount*Number(fx?.rates?.[currency]||0);
-          else {
-            const local=await rates(from,currency).catch(()=>null);
-            converted=amount*Number(local?.rates?.[currency]||0);
-          }
-          if(!(converted>0)) continue;
-          out.push({
-            storeName:"Driffle",
-            storeId:"driffle",
-            convertedPrice:converted,
-            salePrice:amount,
-            originalPrice:amount,
-            currency:from,
-            discount:0,
-            url:"https://driffle.com/product/"+encodeURIComponent(p.slug||p.title),
-            region:p.regionName||"Various",
-            platform:p.platform||"PC",
-            activation:p.platform||"Digital Key",
-            source:"marketplace",
-            type:"Game Key",
-            availability:"In stock",
-            stock:null,
-            verified:true
-          });
-        }
-      }catch{}
-    }
-    return out;
-  }catch{return []}
-}
 
 async function steamRegionalSearch(q,region,currency){
   const cc={za:"za",us:"us",gb:"gb",eu:"de",au:"au",ca:"ca"}[String(region||"").toLowerCase()];
@@ -213,11 +147,6 @@ app.get("/api/search",async(req,res)=>{
         groups.get(groupKey).deals.push(d);
       }
     }
-    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
-    if(marketplaceDeals.length){
-      const first=groups.values().next().value;
-      if(first)first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0&&d.url));
-    }
     const results=[...groups.values()]
       .map(g=>({...g,deals:g.deals.filter(d=>Number(d.convertedPrice)>0&&d.url)}))
       .filter(g=>g.deals.length);
@@ -234,7 +163,7 @@ app.get("/api/capabilities",(req,res)=>{
   res.json({
     platforms:["PC"],
     stores:["Steam"],
-    marketplaceLive:Boolean(process.env.DRIFFLE_API_KEY),
+    marketplaceLive:false,
     xboxLive:false
   });
 });
