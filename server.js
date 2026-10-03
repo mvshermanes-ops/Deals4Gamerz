@@ -100,56 +100,12 @@ async function driffleSearch(q,currency,fx){
     return out;
   }catch{return []}
 }
-async function playstationSearch(q,currency,region){
-  const key=process.env.PLATPRICES_API_KEY;
-  if(!key)return [];
-  const requestedRegion=String(region||"global").toLowerCase();\n  if(requestedRegion==="global")return [];\n  const psRegion=requestedRegion==="eu"?"gb":requestedRegion;
-  try{
-    const url="https://platprices.com/api/v2/games/search?q="+encodeURIComponent(q)+"&region="+encodeURIComponent(psRegion)+"&fields=PPID,ProductName,Img,PSStoreURL,BasePrice,SalePrice,DiscPerc,PriceCurrency,region";
-    const r=await fetch(url,{headers:{"X-API-Key":key,"User-Agent":"Deals4Gamerz/1.0"}});
-    if(!r.ok)return [];
-    const j=await r.json();
-    if(j?.success===false||!Array.isArray(j.data))return [];
-    const from=String(j?.meta?.region||j?.data?.[0]?.PriceCurrency||"USD").toUpperCase();
-    const fx=from===currency?1:Number(((await rates(from).catch(()=>null))||{}).rates?.[currency]||0);
-    if(!(fx>0))return [];
-    return j.data.slice(0,8).map(function(p){
-      const raw=Number(p.SalePrice??p.BasePrice);
-      const base=Number(p.BasePrice??raw);
-      if(!(raw>=0)||!p.PSStoreURL)return null;
-      const local=raw/100;
-      const original=base/100;
-      return {
-        storeName:"PlayStation Store",
-        storeId:"playstation",
-        convertedPrice:local*fx,
-        salePrice:local,
-        originalPrice:original*fx,
-        currency:from,
-        discount:Number(p.DiscPerc)||0,
-        url:p.PSStoreURL,
-        region:String(p.region||psRegion).toUpperCase(),
-        platform:(p.IsPS5&&p.IsPS4)?"PlayStation":(p.IsPS5?"PS5":"PS4"),
-        activation:"PlayStation Store",
-        verified:true,
-        source:"official",
-        type:"Official digital store",
-        availability:"Available",
-        stock:null
-      };
-    }).filter(Boolean);
-  }catch(e){
-    console.error("PlatPrices error:",e?.message||e);
-    return [];
-  }
-}
 
 app.get("/api/capabilities",(req,res)=>{
   res.json({
-    platforms:["PC",...(process.env.PLATPRICES_API_KEY?["PlayStation"]:[])],
+    platforms:["PC"],
     stores:["Steam"],
     marketplaceLive:Boolean(process.env.DRIFFLE_API_KEY),
-    playstationLive:Boolean(process.env.PLATPRICES_API_KEY),
     xboxLive:false
   });
 });
