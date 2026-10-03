@@ -13,7 +13,7 @@ function init(){
   let searchController=null;
   async function loadCapabilities(){
     try{
-      const r=await fetch("/api/capabilities",{cache:"no-store",signal:searchController.signal});
+      const r=await fetch("/api/capabilities",{cache:"no-store"});
       if(!r.ok)return;
       const c=await r.json();
       platform.innerHTML='<option value="all">All platforms</option>';
