@@ -7,12 +7,13 @@ function init(){
   if(!cur||!region||!q||!out||!go)return;
   loadCapabilities();
   Object.entries(C).forEach(([k,v])=>{if(!cur.querySelector('option[value="'+k+'"]')){const o=document.createElement("option");o.value=k;o.textContent=v[0]+" "+k+" — "+v[1];cur.appendChild(o)}});
-  cur.value=localStorage.d4g_currency||"ZAR";
-  region.value=localStorage.d4g_region||"global";
+  cur.value=C[localStorage.d4g_currency]?localStorage.d4g_currency:"ZAR";
+  region.value=["global","za","us","gb","eu","au","ca"].includes(localStorage.d4g_region)?localStorage.d4g_region:"global";
   let data=[];
+  let searchController=null;
   async function loadCapabilities(){
     try{
-      const r=await fetch("/api/capabilities",{cache:"no-store"});
+      const r=await fetch("/api/capabilities",{cache:"no-store",signal:searchController.signal});
       if(!r.ok)return;
       const c=await r.json();
       platform.innerHTML='<option value="all">All platforms</option>';
@@ -41,6 +42,8 @@ function init(){
   async function search(){
     const term=q.value.trim();
     if(!term)return;
+    if(searchController)searchController.abort();
+    searchController=new AbortController();
     out.innerHTML='<div class="empty"><h3>Searching…</h3><p>Checking live deal data.</p></div>';
     title.textContent='Results for “'+term+'”';
     try{
@@ -54,6 +57,7 @@ function init(){
       activation.value=stores.includes(previous)?previous:"all";
       render();
     }catch(e){
+      if(e?.name==="AbortError")return;
       out.innerHTML='<div class="empty"><h3>Couldn’t load deals</h3><p>'+esc(e.message||"Search failed. Please try again.")+'</p></div>';
     }
   }
