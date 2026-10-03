@@ -113,6 +113,7 @@ function init(){
     alertDialog.close();checkAlerts();render();pollSavedAlerts()});
   cur.addEventListener("change",()=>{storageSet("d4g_currency",cur.value);if(q.value.trim())search()});
   region.addEventListener("change",()=>{storageSet("d4g_region",region.value);if(q.value.trim())search()});
+  window.__d4gReady=true;
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
