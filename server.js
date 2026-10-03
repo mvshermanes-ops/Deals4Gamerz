@@ -130,9 +130,9 @@ async function rates(base){
 app.get("/api/search",async(req,res)=>{
   const q=String(req.query.q||"").trim();
   const currency=String(req.query.currency||"ZAR").toUpperCase();
-  const country=String(req.query.country||"GLOBAL").toUpperCase();
+  const region=String(req.query.region||"global").toLowerCase();
   if(!q)return res.status(400).json({error:"Missing search query"});
-  const key="s:"+q.toLowerCase()+":"+currency+":"+country, hit=cache.get(key);
+  const key="s:"+q.toLowerCase()+":"+currency+":"+region, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
   try{
     // One CheapShark deals request is enough to get live prices for the search.
@@ -163,7 +163,7 @@ app.get("/api/search",async(req,res)=>{
         currency:"USD",
         discount:Number.parseFloat(d.savings)||0,
         url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
-        region:"Global",
+        region:region==="za"?"ZA":region==="us"?"US":region==="gb"?"GB":region==="eu"?"EU":region==="au"?"AU":region==="ca"?"CA":"Global",
         platform:"PC",
         activation:storeName,
         verified:true,
@@ -199,7 +199,7 @@ app.get("/api/search",async(req,res)=>{
       .map(g=>({...g,deals:g.deals.filter(d=>Number(d.convertedPrice)>0&&d.url)}))
       .filter(g=>g.deals.length);
 
-    const out={country,currency,results};
+    const out={region,currency,results};
     cache.set(key,{t:Date.now(),v:out});
     res.json(out);
   }catch(e){
