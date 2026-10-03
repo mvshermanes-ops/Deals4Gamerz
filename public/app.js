@@ -5,9 +5,26 @@ const $=id=>document.getElementById(id);
 function init(){
   const cur=$("currency"),q=$("q"),out=$("results"),platform=$("platform"),activation=$("activation"),source=$("source"),sort=$("sort"),title=$("title"),go=$("go");
   if(!cur||!q||!out||!go)return;
+  loadCapabilities();
   Object.entries(C).forEach(([k,v])=>{if(!cur.querySelector('option[value="'+k+'"]')){const o=document.createElement("option");o.value=k;o.textContent=v[0]+" "+k+" — "+v[1];cur.appendChild(o)}});
   cur.value=localStorage.d4g_currency||"ZAR";
   let data=[];
+  async function loadCapabilities(){
+    try{
+      const r=await fetch("/api/capabilities",{cache:"no-store"});
+      if(!r.ok)return;
+      const c=await r.json();
+      platform.innerHTML='<option value="all">All platforms</option>';
+      (c.platforms||[]).forEach(p=>{const o=document.createElement("option");o.value=p;o.textContent=p;platform.appendChild(o)});
+      activation.innerHTML='<option value="all">All stores</option>';
+      (c.stores||[]).forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;activation.appendChild(o)});
+      const marketplace=source.querySelector('option[value="marketplace"]');
+      if(marketplace){
+        marketplace.disabled=!c.marketplaceLive;
+        marketplace.textContent=c.marketplaceLive?"Key marketplaces":"Key marketplaces — awaiting live feed";
+      }
+    }catch{}
+  }
   const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
   const initials=s=>String(s).split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase();
   const money=n=>(C[cur.value]?.[0]||cur.value)+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
