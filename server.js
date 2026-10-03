@@ -4,6 +4,7 @@ const app=express();
 const PORT=process.env.PORT||3000;
 const cache=new Map();
 const fxCache=new Map();
+const storeCache={t:0,v:[]};
 const FX_TTL=60*60*1000;
 const RETAILER_INFO={
   "Fanatical":{source:"official",type:"Authorized retailer"},
@@ -42,6 +43,8 @@ function smartTerms(q){
   const cleaned=raw.replace(/\b(pc|steam|windows|digital|key|edition|game)\b/gi," ").replace(/\s+/g," ").trim();
   return [...new Set([raw,cleaned].filter(Boolean))].slice(0,2);
 }
+function steamMinorUnitDivisor(currency){return new Set(["JPY","KRW"]).has(String(currency||"").toUpperCase())?1:100;}
+
 async function steamRegionalSearch(q,region,currency){
   const cc={za:"za",us:"us",gb:"gb",eu:"de",au:"au",ca:"ca"}[String(region||"").toLowerCase()];
   if(!cc)return [];
@@ -52,9 +55,10 @@ async function steamRegionalSearch(q,region,currency){
     const out=[];
     for(const p of rows.slice(0,8)){
       if(p?.type!=="app")continue;
-      const amount=Number(p?.price?.final)/100;
+      const divisor=steamMinorUnitDivisor(from);\n      const amount=Number(p?.price?.final)/divisor;
       if(!(amount>0)||!p?.id)continue;
       const from=String(p?.price?.currency||"USD").toUpperCase();
+      const divisor=steamMinorUnitDivisor(from);
       const fx=from===currency?1:Number((await rates(from,currency).catch(()=>null))?.rates?.[currency]||0);
       if(!(fx>0))continue;
       out.push({
@@ -62,7 +66,7 @@ async function steamRegionalSearch(q,region,currency){
         storeId:"steam",
         convertedPrice:amount*fx,
         salePrice:amount,
-        originalPrice:Number(p?.price?.initial||p?.price?.final)/100*fx,
+        originalPrice:Number(p?.price?.initial||p?.price?.final)/divisor*fx,
         currency:from,
         discount:Number(p?.price?.discount_percent)||0,
         url:"https://store.steampowered.com/app/"+encodeURIComponent(p.id)+"/",
@@ -124,7 +128,7 @@ app.get("/api/search",async(req,res)=>{
     const seenDeals=new Set();
     const deals=dealResponses.filter(d=>{const id=String(d?.dealID||"");if(!id||seenDeals.has(id))return false;seenDeals.add(id);return true;});
     const fx=await rates("USD",currency);
-    const stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]);
+    let stores=[];\n    if(storeCache.v.length&&Date.now()-storeCache.t<TTL)stores=storeCache.v;\n    else { stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]); if(Array.isArray(stores)&&stores.length){storeCache.v=stores;storeCache.t=Date.now();} }
     const storeMap=Object.fromEntries((Array.isArray(stores)?stores:[]).map(s=>[String(s.storeID),s.storeName]));
     const groups=new Map();
     for(const d of (Array.isArray(deals)?deals:[])){
@@ -137,7 +141,7 @@ app.get("/api/search",async(req,res)=>{
       const info=RETAILER_INFO[storeName]||{source:"official",type:"Store"};
       const deal={
         storeName,storeId:d.storeID,convertedPrice:converted,salePrice:sale,
-        originalPrice:Number.isFinite(normal)&&normal>0?normal:sale,currency:"USD",
+        originalPrice:(Number.isFinite(normal)&&normal>0?normal:sale)*rate,currency:currency,sourceCurrency:"USD",
         discount:Number.parseFloat(d.savings)||0,
         url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
         region:"Global",
