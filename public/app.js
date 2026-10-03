@@ -106,7 +106,7 @@ function init(){
   setInterval(pollSavedAlerts,10*60*1000);
   setTimeout(pollSavedAlerts,3000);
   alertDialog?.querySelector("[data-close]")?.addEventListener("click",()=>alertDialog.close());
-  alertDialog?.querySelector("[data-save-alert]")?.addEventListener("click",()=>{if(!pendingAlert)return;const target=Number(alertPrice.value);if(!(target>0))return;const payload={target,created:new Date().toISOString(),title:pendingAlert.title,currency:cur.value,region:region.value};
+  alertDialog?.querySelector("[data-save-alert]")?.addEventListener("click",async()=>{if(!pendingAlert)return;const target=Number(alertPrice.value);if(!(target>0))return;const payload={target,created:new Date().toISOString(),title:pendingAlert.title,currency:cur.value,region:region.value};
     const saveKey=alertKey(pendingAlert.title);storageSet(saveKey,JSON.stringify(payload));
     if("Notification" in window&&Notification.permission==="default"){try{await Notification.requestPermission()}catch{}}
     alertDialog.close();checkAlerts();render();pollSavedAlerts()});
