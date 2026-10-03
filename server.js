@@ -55,10 +55,10 @@ async function steamRegionalSearch(q,region,currency){
     const out=[];
     for(const p of rows.slice(0,8)){
       if(p?.type!=="app")continue;
-      const divisor=steamMinorUnitDivisor(from);\n      const amount=Number(p?.price?.final)/divisor;
-      if(!(amount>0)||!p?.id)continue;
       const from=String(p?.price?.currency||"USD").toUpperCase();
       const divisor=steamMinorUnitDivisor(from);
+      const amount=Number(p?.price?.final)/divisor;
+      if(!(amount>0)||!p?.id)continue;
       const fx=from===currency?1:Number((await rates(from,currency).catch(()=>null))?.rates?.[currency]||0);
       if(!(fx>0))continue;
       out.push({
@@ -128,7 +128,9 @@ app.get("/api/search",async(req,res)=>{
     const seenDeals=new Set();
     const deals=dealResponses.filter(d=>{const id=String(d?.dealID||"");if(!id||seenDeals.has(id))return false;seenDeals.add(id);return true;});
     const fx=await rates("USD",currency);
-    let stores=[];\n    if(storeCache.v.length&&Date.now()-storeCache.t<TTL)stores=storeCache.v;\n    else { stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]); if(Array.isArray(stores)&&stores.length){storeCache.v=stores;storeCache.t=Date.now();} }
+    let stores=[];
+    if(storeCache.v.length&&Date.now()-storeCache.t<TTL)stores=storeCache.v;
+    else { stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]); if(Array.isArray(stores)&&stores.length){storeCache.v=stores;storeCache.t=Date.now();} }
     const storeMap=Object.fromEntries((Array.isArray(stores)?stores:[]).map(s=>[String(s.storeID),s.storeName]));
     const groups=new Map();
     for(const d of (Array.isArray(deals)?deals:[])){
