@@ -100,6 +100,27 @@ async function driffleSearch(q,currency,fx){
     return out;
   }catch{return []}
 }
+async function playstationSearch(q,currency){
+  const key=process.env.PLATPRICES_API_KEY;
+  if(!key)return [];
+  try{
+    const url='https://platprices.com/api/v2/games/search?q='+encodeURIComponent(q)+'&region=za&fields=PPID,ProductName,Img,PSStoreURL,BasePrice,SalePrice,DiscPerc,PriceCurrency';
+    const r=await fetch(url,{headers:{'X-API-Key':key,'User-Agent':'Deals4Gamerz/1.0'}});
+    if(!r.ok)return [];
+    const j=await r.json();
+    if(!Array.isArray(j.data))return [];
+    const from=String(j.data[0]&&j.data[0].PriceCurrency||'ZAR').toUpperCase();
+    const fx=from===currency?1:Number(((await rates(from).catch(()=>null))||{}).rates&&((await rates(from).catch(()=>null))||{}).rates[currency]||0);
+    if(!(fx>0))return [];
+    return j.data.slice(0,8).map(function(p){
+      const raw=Number(p.SalePrice||p.BasePrice);
+      const base=Number(p.BasePrice||raw);
+      if(!(raw>0)||!p.PSStoreURL)return null;
+      const local=raw/100, original=base/100;
+      return {storeName:'PlayStation Store',storeId:'playstation',convertedPrice:local*fx,salePrice:local,originalPrice:original*fx,currency:from,discount:Number(p.DiscPerc)||0,url:p.PSStoreURL,region:'ZA',platform:'PlayStation',activation:'PlayStation Store',verified:true,source:'official',type:'Official digital store',availability:'Available',stock:null};
+    }).filter(Boolean);
+  }catch(e){return []}
+}
 async function rates(base){
   const key="fx:"+base, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return hit.v;
@@ -165,13 +186,13 @@ app.get("/api/search",async(req,res)=>{
       groups.get(groupKey).deals.push(deal);
     }
 
-    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
+    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);\n    const playstationDeals=await playstationSearch(q,currency).catch(()=>[]);
     if(marketplaceDeals.length){
       const first=groups.values().next().value;
       if(first) first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0&&d.url));
     }
 
-    const results=[...groups.values()]
+    if(playstationDeals.length) groups.set('playstation:'+q,{title:q,cover:'',platform:'PlayStation',edition:'Digital',deals:playstationDeals});\n\n    const results=[...groups.values()]
       .map(g=>({...g,deals:g.deals.filter(d=>Number(d.convertedPrice)>0&&d.url)}))
       .filter(g=>g.deals.length);
 
