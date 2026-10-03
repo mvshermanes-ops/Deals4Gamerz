@@ -103,9 +103,9 @@ async function driffleSearch(q,currency,fx){
 async function playstationSearch(q,currency,region){
   const key=process.env.PLATPRICES_API_KEY;
   if(!key)return [];
-  const requestedRegion=String(region||"za").toLowerCase();
+  const requestedRegion=String(region||"global").toLowerCase();\n  if(requestedRegion==="global")return [];\n  const psRegion=requestedRegion==="eu"?"gb":requestedRegion;
   try{
-    const url="https://platprices.com/api/v2/games/search?q="+encodeURIComponent(q)+"&region="+encodeURIComponent(requestedRegion)+"&fields=PPID,ProductName,Img,PSStoreURL,BasePrice,SalePrice,DiscPerc,PriceCurrency,region";
+    const url="https://platprices.com/api/v2/games/search?q="+encodeURIComponent(q)+"&region="+encodeURIComponent(psRegion)+"&fields=PPID,ProductName,Img,PSStoreURL,BasePrice,SalePrice,DiscPerc,PriceCurrency,region";
     const r=await fetch(url,{headers:{"X-API-Key":key,"User-Agent":"Deals4Gamerz/1.0"}});
     if(!r.ok)return [];
     const j=await r.json();
@@ -128,7 +128,7 @@ async function playstationSearch(q,currency,region){
         currency:from,
         discount:Number(p.DiscPerc)||0,
         url:p.PSStoreURL,
-        region:String(p.region||requestedRegion).toUpperCase(),
+        region:String(p.region||psRegion).toUpperCase(),
         platform:(p.IsPS5&&p.IsPS4)?"PlayStation":(p.IsPS5?"PS5":"PS4"),
         activation:"PlayStation Store",
         verified:true,
