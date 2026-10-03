@@ -43,7 +43,7 @@ function init(){
     out.innerHTML='<div class="empty"><h3>Searching…</h3><p>Checking live deal data.</p></div>';
     title.textContent='Results for “'+term+'”';
     try{
-      const r=await fetch('/api/search?q='+encodeURIComponent(term)+'&currency='+encodeURIComponent(cur.value)+'&country=ZA',{cache:"no-store"});
+      const r=await fetch('/api/search?q='+encodeURIComponent(term)+'&currency='+encodeURIComponent(cur.value)+'',{cache:"no-store"});
       const payload=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(payload.error||"Live search failed");
       data=payload.results||[];
