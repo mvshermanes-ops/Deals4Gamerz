@@ -13,7 +13,7 @@ function init(){
   let searchController=null;
   async function loadCapabilities(){
     try{
-      const r=await fetch("/api/capabilities",{cache:"no-store",signal:searchController.signal});
+      const r=await fetch("/api/capabilities",{cache:"no-store"});
       if(!r.ok)return;
       const c=await r.json();
       platform.innerHTML='<option value="all">All platforms</option>';
@@ -47,7 +47,7 @@ function init(){
     out.innerHTML='<div class="empty"><h3>Searching…</h3><p>Checking live deal data.</p></div>';
     title.textContent='Results for “'+term+'”';
     try{
-      const r=await fetch('/api/search?q='+encodeURIComponent(term)+'&currency='+encodeURIComponent(cur.value)+'&region='+encodeURIComponent(region.value),{cache:"no-store"});
+      const r=await fetch('/api/search?q='+encodeURIComponent(term)+'&currency='+encodeURIComponent(cur.value)+'&region='+encodeURIComponent(region.value),{cache:"no-store",signal:searchController.signal});
       const payload=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(payload.error||"Live search failed");
       data=payload.results||[];
