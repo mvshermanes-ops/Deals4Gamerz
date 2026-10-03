@@ -63,7 +63,7 @@ function init(){
           const fingerprint=new Date().toISOString().slice(0,10)+"|"+best.storeName+"|"+best.convertedPrice.toFixed(2);
           if(alert.lastNotified!==fingerprint){
             alert.lastNotified=fingerprint;storageSet(key,JSON.stringify(alert));
-            if("Notification" in window&&Notification.permission==="granted")new Notification("Deals4Gamerz price alert",{body:alert.title+" is now "+moneyFor(best.convertedPrice,alert.currency)+" at "+best.storeName+".});
+            if("Notification" in window&&Notification.permission==="granted")new Notification("Deals4Gamerz price alert",{body:alert.title+" is now "+moneyFor(best.convertedPrice,alert.currency)+" at "+best.storeName+"."});
           }
         }
       }catch{}
