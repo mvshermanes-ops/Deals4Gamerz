@@ -33,7 +33,8 @@ function init(){
   }
   const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
   const initials=s=>String(s).split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase();
-  const money=n=>(C[cur.value]?.[0]||cur.value)+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const moneyFor=(n,currency)=>{const code=currency||cur.value;return (C[code]?.[0]||code)+" "+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2)};};
+  const money=n=>moneyFor(n,cur.value);
   const historyKey=(name,store)=>"d4g_history:"+name.toLowerCase().replace(/[^a-z0-9]+/g,"-")+":"+store.toLowerCase().replace(/[^a-z0-9]+/g,"-")+":"+cur.value+":"+region.value;
   const getHistory=(name,store)=>{try{return JSON.parse(storageGet(historyKey(name,store))||"[]")}catch{return[]}};
   function recordHistory(){const now=new Date().toISOString().slice(0,10);data.forEach(g=>(g.deals||[]).forEach(d=>{if(!(Number(d.convertedPrice)>0))return;const k=historyKey(g.title||q.value,d.storeName||"store"),h=getHistory(g.title||q.value,d.storeName||"store");if(!h.length||h[h.length-1].date!==now)h.push({date:now,price:Number(d.convertedPrice)});else h[h.length-1].price=Number(d.convertedPrice);storageSet(k,JSON.stringify(h.slice(-30)))}))}
@@ -62,7 +63,7 @@ function init(){
           const fingerprint=new Date().toISOString().slice(0,10)+"|"+best.storeName+"|"+best.convertedPrice.toFixed(2);
           if(alert.lastNotified!==fingerprint){
             alert.lastNotified=fingerprint;storageSet(key,JSON.stringify(alert));
-            if("Notification" in window&&Notification.permission==="granted")new Notification("Deals4Gamerz price alert",{body:alert.title+" is now "+money(best.convertedPrice)+" at "+best.storeName+"."});
+            if("Notification" in window&&Notification.permission==="granted")new Notification("Deals4Gamerz price alert",{body:alert.title+" is now "+moneyFor(best.convertedPrice,alert.currency)+" at "+best.storeName+".});
           }
         }
       }catch{}
