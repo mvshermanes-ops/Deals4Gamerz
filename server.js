@@ -130,7 +130,7 @@ async function rates(base){
 app.get("/api/search",async(req,res)=>{
   const q=String(req.query.q||"").trim();
   const currency=String(req.query.currency||"ZAR").toUpperCase();
-  const country=String(req.query.country||"ZA").toUpperCase();
+  const country=String(req.query.country||"GLOBAL").toUpperCase();
   if(!q)return res.status(400).json({error:"Missing search query"});
   const key="s:"+q.toLowerCase()+":"+currency+":"+country, hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
@@ -163,7 +163,7 @@ app.get("/api/search",async(req,res)=>{
         currency:"USD",
         discount:Number.parseFloat(d.savings)||0,
         url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
-        region:country,
+        region:"Global",
         platform:"PC",
         activation:storeName,
         verified:true,
