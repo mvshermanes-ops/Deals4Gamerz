@@ -47,6 +47,10 @@ function init(){
       const payload=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(payload.error||"Live search failed");
       data=payload.results||[];
+      const stores=[...new Set(data.flatMap(g=>(g.deals||[]).map(d=>d.storeName)).filter(Boolean))].sort();
+      const previous=activation.value;
+      activation.innerHTML='<option value="all">All stores</option>'+stores.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join("");
+      activation.value=stores.includes(previous)?previous:"all";
       render();
     }catch(e){
       out.innerHTML='<div class="empty"><h3>Couldn’t load deals</h3><p>'+esc(e.message||"Search failed. Please try again.")+'</p></div>';
