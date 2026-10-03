@@ -34,7 +34,7 @@ function init(){
   const historyKey=(name,store)=>"d4g_history:"+name.toLowerCase().replace(/[^a-z0-9]+/g,"-")+":"+store.toLowerCase().replace(/[^a-z0-9]+/g,"-")+":"+cur.value+":"+region.value;
   const getHistory=(name,store)=>{try{return JSON.parse(localStorage.getItem(historyKey(name,store))||"[]")}catch{return[]}};
   function recordHistory(){const now=new Date().toISOString().slice(0,10);data.forEach(g=>(g.deals||[]).forEach(d=>{if(!(Number(d.convertedPrice)>0))return;const k=historyKey(g.title||q.value,d.storeName||"store"),h=getHistory(g.title||q.value,d.storeName||"store");if(!h.length||h[h.length-1].date!==now)h.push({date:now,price:Number(d.convertedPrice)});else h[h.length-1].price=Number(d.convertedPrice);localStorage.setItem(k,JSON.stringify(h.slice(-30)))}))}
-  function bestDeal(g){return (g.deals||[]).filter(d=>Number(d.convertedPrice)>0&&d.url).sort((a,b)=>a.convertedPrice-b.convertedPrice)[0]}
+  function bestDeal(g){return (g.deals||[]).filter(d=>Number(d.convertedPrice)>0&&d.url).reduce((best,d)=>!best||d.convertedPrice<best.convertedPrice?d:best,null)}
   function alertKey(name){return "d4g_alert:"+name.toLowerCase().replace(/[^a-z0-9]+/g,"-")+":"+cur.value+":"+region.value}
   function getAlert(name){try{return JSON.parse(localStorage.getItem(alertKey(name))||"null")}catch{return null}}
   function checkAlerts(){const hits=[];data.forEach(g=>{const al=getAlert(g.title),b=bestDeal(g);if(al&&b&&b.convertedPrice<=al.target)hits.push(g.title+" is now "+money(b.convertedPrice)+" at "+b.storeName+" (alert: "+money(al.target)+").")});alertStatus.innerHTML=hits.map(x=>"<div>"+esc(x)+"</div>").join("");alertStatus.classList.toggle("show",hits.length>0)}
