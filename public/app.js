@@ -7,7 +7,8 @@ function init(){
   if(!cur||!region||!q||!out||!go)return;
   loadCapabilities();
   Object.entries(C).forEach(([k,v])=>{if(!cur.querySelector('option[value="'+k+'"]')){const o=document.createElement("option");o.value=k;o.textContent=v[0]+" "+k+" — "+v[1];cur.appendChild(o)}});
-  cur.value=localStorage.d4g_currency||"ZAR";\n  region.value=localStorage.d4g_region||"global";
+  cur.value=localStorage.d4g_currency||"ZAR";
+  region.value=localStorage.d4g_region||"global";
   let data=[];
   async function loadCapabilities(){
     try{
@@ -43,7 +44,7 @@ function init(){
     out.innerHTML='<div class="empty"><h3>Searching…</h3><p>Checking live deal data.</p></div>';
     title.textContent='Results for “'+term+'”';
     try{
-      const r=await fetch('/api/search?q='+encodeURIComponent(term)+'&currency='+encodeURIComponent(cur.value)+'',{cache:"no-store"});
+      const r=await fetch('/api/search?q='+encodeURIComponent(term)+'&currency='+encodeURIComponent(cur.value)+'&region='+encodeURIComponent(region.value),{cache:"no-store"});
       const payload=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(payload.error||"Live search failed");
       data=payload.results||[];
@@ -60,7 +61,8 @@ function init(){
   q.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();search()}});
   document.querySelectorAll("[data-q]").forEach(b=>b.addEventListener("click",e=>{e.preventDefault();q.value=b.dataset.q;search()}));
   [platform,activation,source,sort].forEach(x=>x.addEventListener("change",render));
-  cur.addEventListener("change",()=>{localStorage.d4g_currency=cur.value;if(q.value.trim())search()});\n  region.addEventListener("change",()=>{localStorage.d4g_region=region.value;if(q.value.trim())search()});
+  cur.addEventListener("change",()=>{localStorage.d4g_currency=cur.value;if(q.value.trim())search()});
+  region.addEventListener("change",()=>{localStorage.d4g_region=region.value;if(q.value.trim())search()});
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
