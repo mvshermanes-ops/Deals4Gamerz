@@ -104,10 +104,13 @@ async function driffleSearch(q,currency,fx){
 async function rates(base="USD"){
   const b=String(base||"USD").toUpperCase();
   if(b==="USD") return {rates:{USD:1}};
-  const r=await fetch("https://api.frankfurter.app/latest?from="+encodeURIComponent(b),{headers:{"User-Agent":"Deals4Gamerz/1.0"},signal:AbortSignal.timeout(8000)});
+  const r=await fetch("https://api.frankfurter.dev/v2/rates?base="+encodeURIComponent(b),{headers:{"User-Agent":"Deals4Gamerz/1.0"},signal:AbortSignal.timeout(8000)});
   if(!r.ok) throw new Error("FX upstream "+r.status);
   const j=await r.json();
-  return {rates:{[b]:1,...(j.rates||{})}};
+  const rows=Array.isArray(j)?j:[];
+  const rates={ [b]:1 };
+  for(const row of rows){if(row?.quote&&Number.isFinite(Number(row.rate)))rates[String(row.quote).toUpperCase()]=Number(row.rate)}
+  return {rates};
 }
 
 app.get("/api/search",async(req,res)=>{
@@ -139,7 +142,7 @@ app.get("/api/search",async(req,res)=>{
         originalPrice:Number.isFinite(normal)&&normal>0?normal:sale,currency:"USD",
         discount:Number.parseFloat(d.savings)||0,
         url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
-        region:region==="za"?"ZA":region==="us"?"US":region==="gb"?"GB":region==="eu"?"EU":region==="au"?"AU":region==="ca"?"CA":"Global",
+        region:"Global",
         platform:"PC",activation:storeName,verified:true,source:info.source,type:info.type,
         availability:"Available",stock:null
       };
