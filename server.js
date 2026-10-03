@@ -37,6 +37,11 @@ async function getJSON(url){
   }finally{clearTimeout(timer)}
 }
 
+function smartTerms(q){
+  const raw=String(q||"").trim();
+  const cleaned=raw.replace(/\b(pc|steam|windows|digital|key|edition|game)\b/gi," ").replace(/\s+/g," ").trim();
+  return [...new Set([raw,cleaned].filter(Boolean))].slice(0,2);
+}
 async function steamRegionalSearch(q,region,currency){
   const cc={za:"za",us:"us",gb:"gb",eu:"de",au:"au",ca:"ca"}[String(region||"").toLowerCase()];
   if(!cc)return [];
@@ -111,9 +116,13 @@ app.get("/api/search",async(req,res)=>{
   const hit=cache.get(key);
   if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
   try{
-    const deals=await getJSON(
-      "https://www.cheapshark.com/api/1.0/deals?title="+encodeURIComponent(q)+"&pageSize=60&sortBy=Price&desc=0"
-    );
+    const dealResponses=[];
+    for(const term of smartTerms(q)){
+      const rows=await getJSON("https://www.cheapshark.com/api/1.0/deals?title="+encodeURIComponent(term)+"&pageSize=60&sortBy=Price&desc=0").catch(()=>[]);
+      dealResponses.push(...(Array.isArray(rows)?rows:[]));
+    }
+    const seenDeals=new Set();
+    const deals=dealResponses.filter(d=>{const id=String(d?.dealID||"");if(!id||seenDeals.has(id))return false;seenDeals.add(id);return true;});
     const fx=await rates("USD",currency);
     const stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]);
     const storeMap=Object.fromEntries((Array.isArray(stores)?stores:[]).map(s=>[String(s.storeID),s.storeName]));
