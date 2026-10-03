@@ -204,15 +204,6 @@ app.get("/api/search",async(req,res)=>{
     res.status(502).json({error:"Live deal provider unavailable",details:e?.message||"Unknown upstream error"});
   }
 });
-app.get("/api/capabilities",(req,res)=>{
-  const stores=new Set();
-  stores.add("Steam"); // populated/validated against live CheapShark results by search
-  res.json({
-    platforms:["PC"],
-    stores:[...stores],
-    marketplaceLive:Boolean(process.env.DRIFFLE_API_KEY)
-  });
-});
-app.get("/health",(req,res)=>res.json({ok:true,name:"Deals4Gamerz"}));
+app.get("/api/capabilities",(req,res)=>{\n  res.json({\n    platforms:["PC",...(process.env.PLATPRICES_API_KEY?["PlayStation"]:[])],\n    stores:["Steam"],\n    marketplaceLive:Boolean(process.env.DRIFFLE_API_KEY),\n    playstationLive:Boolean(process.env.PLATPRICES_API_KEY),\n    xboxLive:false\n  });\n});\napp.get("/health",(req,res)=>res.json({ok:true,name:"Deals4Gamerz"}));
 app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
 app.listen(PORT,"0.0.0.0",()=>console.log("Deals4Gamerz listening on "+PORT));
