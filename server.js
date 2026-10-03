@@ -101,6 +101,69 @@ async function driffleSearch(q,currency,fx){
   }catch{return []}
 }
 
+async function rates(base="USD"){
+  const b=String(base||"USD").toUpperCase();
+  if(b==="USD") return {rates:{USD:1}};
+  const r=await fetch("https://api.frankfurter.app/latest?from="+encodeURIComponent(b),{headers:{"User-Agent":"Deals4Gamerz/1.0"},signal:AbortSignal.timeout(8000)});
+  if(!r.ok) throw new Error("FX upstream "+r.status);
+  const j=await r.json();
+  return {rates:{[b]:1,...(j.rates||{})}};
+}
+
+app.get("/api/search",async(req,res)=>{
+  const q=String(req.query.q||"").trim();
+  const currency=String(req.query.currency||"ZAR").toUpperCase();
+  const region=String(req.query.region||"global").toLowerCase();
+  if(!q)return res.status(400).json({error:"Missing search query"});
+  const key="s:"+q.toLowerCase()+":"+currency+":"+region;
+  const hit=cache.get(key);
+  if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
+  try{
+    const deals=await getJSON(
+      "https://www.cheapshark.com/api/1.0/deals?title="+encodeURIComponent(q)+"&pageSize=60&sortBy=Price&desc=0"
+    );
+    const fx=await rates("USD").catch(()=>({rates:{USD:1}}));
+    const stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]);
+    const storeMap=Object.fromEntries((Array.isArray(stores)?stores:[]).map(s=>[String(s.storeID),s.storeName]));
+    const groups=new Map();
+    for(const d of (Array.isArray(deals)?deals:[])){
+      const sale=Number.parseFloat(String(d.salePrice??"").replace(/,/g,""));
+      const normal=Number.parseFloat(String(d.normalPrice??"").replace(/,/g,""));
+      const rate=Number(fx?.rates?.[currency]);
+      const converted=Number.isFinite(sale)&&sale>0&&rate>0?sale*rate:0;
+      if(!(converted>0)||!d.dealID)continue;
+      const storeName=storeMap[String(d.storeID)]||("Store "+d.storeID);
+      const info=RETAILER_INFO[storeName]||{source:"official",type:"Store"};
+      const deal={
+        storeName,storeId:d.storeID,convertedPrice:converted,salePrice:sale,
+        originalPrice:Number.isFinite(normal)&&normal>0?normal:sale,currency:"USD",
+        discount:Number.parseFloat(d.savings)||0,
+        url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
+        region:region==="za"?"ZA":region==="us"?"US":region==="gb"?"GB":region==="eu"?"EU":region==="au"?"AU":region==="ca"?"CA":"Global",
+        platform:"PC",activation:storeName,verified:true,source:info.source,type:info.type,
+        availability:"Available",stock:null
+      };
+      const groupKey=String(d.gameID||d.internalName||d.title);
+      if(!groups.has(groupKey))groups.set(groupKey,{title:d.title||q,cover:d.thumb||"",platform:"PC",edition:"Digital",deals:[]});
+      groups.get(groupKey).deals.push(deal);
+    }
+    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
+    if(marketplaceDeals.length){
+      const first=groups.values().next().value;
+      if(first)first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0&&d.url));
+    }
+    const results=[...groups.values()]
+      .map(g=>({...g,deals:g.deals.filter(d=>Number(d.convertedPrice)>0&&d.url)}))
+      .filter(g=>g.deals.length);
+    const out={region,currency,results};
+    cache.set(key,{t:Date.now(),v:out});
+    res.json(out);
+  }catch(e){
+    console.error("Deals4Gamerz search error:",e);
+    res.status(502).json({error:"Live deal provider unavailable",details:e?.message||"Unknown upstream error"});
+  }
+});
+
 app.get("/api/capabilities",(req,res)=>{
   res.json({
     platforms:["PC"],
