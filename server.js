@@ -101,6 +101,49 @@ async function driffleSearch(q,currency,fx){
   }catch{return []}
 }
 
+async function steamRegionalSearch(q,region,currency){
+  const cc={za:"za",us:"us",gb:"gb",eu:"de",au:"au",ca:"ca"}[String(region||"").toLowerCase()];
+  if(!cc)return [];
+  try{
+    const url="https://store.steampowered.com/api/storesearch/?term="+encodeURIComponent(q)+"&l=english&cc="+cc;
+    const items=await getJSON(url);
+    const rows=Array.isArray(items?.items)?items.items:[];
+    const out=[];
+    for(const p of rows.slice(0,8)){
+      if(p?.type!=="app")continue;
+      const amount=Number(p?.price?.final)/100;
+      if(!(amount>0)||!p?.id)continue;
+      const from=String(p?.price?.currency||"USD").toUpperCase();
+      const fx=from===currency?1:Number((await rates(from).catch(()=>null))?.rates?.[currency]||0);
+      if(!(fx>0))continue;
+      out.push({
+        storeName:"Steam",
+        storeId:"steam",
+        convertedPrice:amount*fx,
+        salePrice:amount,
+        originalPrice:Number(p?.price?.initial||p?.price?.final)/100*fx,
+        currency:from,
+        discount:Number(p?.price?.discount_percent)||0,
+        url:"https://store.steampowered.com/app/"+encodeURIComponent(p.id)+"/",
+        region:cc.toUpperCase(),
+        platform:"PC",
+        activation:"Steam",
+        verified:true,
+        source:"official",
+        type:"Official digital store",
+        availability:"Available",
+        stock:null,
+        title:p.name||q,
+        cover:p.tiny_image||""
+      });
+    }
+    return out;
+  }catch(e){
+    console.error("Steam regional search error:",e?.message||e);
+    return [];
+  }
+}
+
 async function rates(base="USD"){
   const b=String(base||"USD").toUpperCase();
   if(b==="USD") return {rates:{USD:1}};
@@ -149,6 +192,14 @@ app.get("/api/search",async(req,res)=>{
       const groupKey=String(d.gameID||d.internalName||d.title);
       if(!groups.has(groupKey))groups.set(groupKey,{title:d.title||q,cover:d.thumb||"",platform:"PC",edition:"Digital",deals:[]});
       groups.get(groupKey).deals.push(deal);
+    }
+    const steamDeals=await steamRegionalSearch(q,region,currency).catch(()=>[]);
+    if(steamDeals.length){
+      for(const d of steamDeals){
+        const groupKey="steam:"+String(d.title||q).toLowerCase();
+        if(!groups.has(groupKey))groups.set(groupKey,{title:d.title||q,cover:d.cover||"",platform:"PC",edition:"Digital",deals:[]});
+        groups.get(groupKey).deals.push(d);
+      }
     }
     const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
     if(marketplaceDeals.length){
