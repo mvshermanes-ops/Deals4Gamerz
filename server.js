@@ -100,113 +100,50 @@ async function driffleSearch(q,currency,fx){
     return out;
   }catch{return []}
 }
-async function playstationSearch(q,currency){
+async function playstationSearch(q,currency,region){
   const key=process.env.PLATPRICES_API_KEY;
   if(!key)return [];
+  const requestedRegion=String(region||"za").toLowerCase();
   try{
-    const url='https://platprices.com/api/v2/games/search?q='+encodeURIComponent(q)+'&region=za&fields=PPID,ProductName,Img,PSStoreURL,BasePrice,SalePrice,DiscPerc,PriceCurrency';
-    const r=await fetch(url,{headers:{'X-API-Key':key,'User-Agent':'Deals4Gamerz/1.0'}});
+    const url="https://platprices.com/api/v2/games/search?q="+encodeURIComponent(q)+"&region="+encodeURIComponent(requestedRegion)+"&fields=PPID,ProductName,Img,PSStoreURL,BasePrice,SalePrice,DiscPerc,PriceCurrency,region";
+    const r=await fetch(url,{headers:{"X-API-Key":key,"User-Agent":"Deals4Gamerz/1.0"}});
     if(!r.ok)return [];
     const j=await r.json();
-    if(!Array.isArray(j.data))return [];
-    const from=String(j.data[0]&&j.data[0].PriceCurrency||'ZAR').toUpperCase();
-    const fx=from===currency?1:Number(((await rates(from).catch(()=>null))||{}).rates&&((await rates(from).catch(()=>null))||{}).rates[currency]||0);
+    if(j?.success===false||!Array.isArray(j.data))return [];
+    const from=String(j?.meta?.region||j?.data?.[0]?.PriceCurrency||"USD").toUpperCase();
+    const fx=from===currency?1:Number(((await rates(from).catch(()=>null))||{}).rates?.[currency]||0);
     if(!(fx>0))return [];
     return j.data.slice(0,8).map(function(p){
-      const raw=Number(p.SalePrice||p.BasePrice);
-      const base=Number(p.BasePrice||raw);
-      if(!(raw>0)||!p.PSStoreURL)return null;
-      const local=raw/100, original=base/100;
-      return {storeName:'PlayStation Store',storeId:'playstation',convertedPrice:local*fx,salePrice:local,originalPrice:original*fx,currency:from,discount:Number(p.DiscPerc)||0,url:p.PSStoreURL,region:'ZA',platform:'PlayStation',activation:'PlayStation Store',verified:true,source:'official',type:'Official digital store',availability:'Available',stock:null};
-    }).filter(Boolean);
-  }catch(e){return []}
-}
-async function rates(base){
-  const key="fx:"+base, hit=cache.get(key);
-  if(hit&&Date.now()-hit.t<TTL)return hit.v;
-  const v=await getJSON("https://open.er-api.com/v6/latest/"+encodeURIComponent(base));
-  cache.set(key,{t:Date.now(),v}); return v;
-}
-app.get("/api/search",async(req,res)=>{
-  const q=String(req.query.q||"").trim();
-  const currency=String(req.query.currency||"ZAR").toUpperCase();
-  const region=String(req.query.region||"global").toLowerCase();
-  if(!q)return res.status(400).json({error:"Missing search query"});
-  const key="s:"+q.toLowerCase()+":"+currency+":"+region, hit=cache.get(key);
-  if(hit&&Date.now()-hit.t<TTL)return res.json(hit.v);
-  try{
-    // One CheapShark deals request is enough to get live prices for the search.
-    // This avoids the old N+1 game-detail requests that could trigger rate limits.
-    const deals=await getJSON(
-      "https://www.cheapshark.com/api/1.0/deals?title="+encodeURIComponent(q)+"&pageSize=60&sortBy=Price&desc=0"
-    );
-    const fx=await rates("USD").catch(()=>({rates:{USD:1}}));
-    const stores=await getJSON("https://www.cheapshark.com/api/1.0/stores").catch(()=>[]);
-    const storeMap=Object.fromEntries((stores||[]).map(s=>[String(s.storeID),s.storeName]));
-    const groups=new Map();
-
-    for(const d of (Array.isArray(deals)?deals:[])){
-      const sale=Number.parseFloat(String(d.salePrice??"").replace(/,/g,""));
-      const normal=Number.parseFloat(String(d.normalPrice??"").replace(/,/g,""));
-      const rate=Number(fx?.rates?.[currency]);
-      const converted=Number.isFinite(sale)&&sale>0&&rate>0 ? sale*rate : 0;
-      if(!(converted>0)||!d.dealID) continue;
-
-      const storeName=storeMap[String(d.storeID)]||("Store "+d.storeID);
-      const info=RETAILER_INFO[storeName]||{source:"official",type:"Store"};
-      const deal={
-        storeName,
-        storeId:d.storeID,
-        convertedPrice:converted,
-        salePrice:sale,
-        originalPrice:Number.isFinite(normal)&&normal>0?normal:sale,
-        currency:"USD",
-        discount:Number.parseFloat(d.savings)||0,
-        url:"https://www.cheapshark.com/redirect?dealID="+encodeURIComponent(d.dealID),
-        region:region==="za"?"ZA":region==="us"?"US":region==="gb"?"GB":region==="eu"?"EU":region==="au"?"AU":region==="ca"?"CA":"Global",
-        platform:"PC",
-        activation:storeName,
+      const raw=Number(p.SalePrice??p.BasePrice);
+      const base=Number(p.BasePrice??raw);
+      if(!(raw>=0)||!p.PSStoreURL)return null;
+      const local=raw/100;
+      const original=base/100;
+      return {
+        storeName:"PlayStation Store",
+        storeId:"playstation",
+        convertedPrice:local*fx,
+        salePrice:local,
+        originalPrice:original*fx,
+        currency:from,
+        discount:Number(p.DiscPerc)||0,
+        url:p.PSStoreURL,
+        region:String(p.region||requestedRegion).toUpperCase(),
+        platform:(p.IsPS5&&p.IsPS4)?"PlayStation":(p.IsPS5?"PS5":"PS4"),
+        activation:"PlayStation Store",
         verified:true,
-        source:info.source,
-        type:info.type,
+        source:"official",
+        type:"Official digital store",
         availability:"Available",
         stock:null
       };
-
-      const groupKey=String(d.gameID||d.internalName||d.title);
-      if(!groups.has(groupKey)){
-        groups.set(groupKey,{
-          title:d.title||q,
-          cover:d.thumb||"",
-          platform:"PC",
-          edition:"Digital",
-          deals:[]
-        });
-      }
-      groups.get(groupKey).deals.push(deal);
-    }
-
-    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
-    const playstationDeals=await playstationSearch(q,currency).catch(()=>[]);
-    if(marketplaceDeals.length){
-      const first=groups.values().next().value;
-      if(first) first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0&&d.url));
-    }
-
-    if(playstationDeals.length) groups.set('playstation:'+q,{title:q,cover:'',platform:'PlayStation',edition:'Digital',deals:playstationDeals});
-
-    const results=[...groups.values()]
-      .map(g=>({...g,deals:g.deals.filter(d=>Number(d.convertedPrice)>0&&d.url)}))
-      .filter(g=>g.deals.length);
-
-    const out={region,currency,results};
-    cache.set(key,{t:Date.now(),v:out});
-    res.json(out);
+    }).filter(Boolean);
   }catch(e){
-    console.error("Deals4Gamerz search error:",e);
-    res.status(502).json({error:"Live deal provider unavailable",details:e?.message||"Unknown upstream error"});
+    console.error("PlatPrices error:",e?.message||e);
+    return [];
   }
-});
+}
+
 app.get("/api/capabilities",(req,res)=>{
   res.json({
     platforms:["PC",...(process.env.PLATPRICES_API_KEY?["PlayStation"]:[])],
