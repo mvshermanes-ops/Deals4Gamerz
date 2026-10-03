@@ -186,13 +186,16 @@ app.get("/api/search",async(req,res)=>{
       groups.get(groupKey).deals.push(deal);
     }
 
-    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);\n    const playstationDeals=await playstationSearch(q,currency).catch(()=>[]);
+    const marketplaceDeals=await driffleSearch(q,currency,fx).catch(()=>[]);
+    const playstationDeals=await playstationSearch(q,currency).catch(()=>[]);
     if(marketplaceDeals.length){
       const first=groups.values().next().value;
       if(first) first.deals.push(...marketplaceDeals.filter(d=>Number(d.convertedPrice)>0&&d.url));
     }
 
-    if(playstationDeals.length) groups.set('playstation:'+q,{title:q,cover:'',platform:'PlayStation',edition:'Digital',deals:playstationDeals});\n\n    const results=[...groups.values()]
+    if(playstationDeals.length) groups.set('playstation:'+q,{title:q,cover:'',platform:'PlayStation',edition:'Digital',deals:playstationDeals});
+
+    const results=[...groups.values()]
       .map(g=>({...g,deals:g.deals.filter(d=>Number(d.convertedPrice)>0&&d.url)}))
       .filter(g=>g.deals.length);
 
@@ -204,6 +207,15 @@ app.get("/api/search",async(req,res)=>{
     res.status(502).json({error:"Live deal provider unavailable",details:e?.message||"Unknown upstream error"});
   }
 });
-app.get("/api/capabilities",(req,res)=>{\n  res.json({\n    platforms:["PC",...(process.env.PLATPRICES_API_KEY?["PlayStation"]:[])],\n    stores:["Steam"],\n    marketplaceLive:Boolean(process.env.DRIFFLE_API_KEY),\n    playstationLive:Boolean(process.env.PLATPRICES_API_KEY),\n    xboxLive:false\n  });\n});\napp.get("/health",(req,res)=>res.json({ok:true,name:"Deals4Gamerz"}));
+app.get("/api/capabilities",(req,res)=>{
+  res.json({
+    platforms:["PC",...(process.env.PLATPRICES_API_KEY?["PlayStation"]:[])],
+    stores:["Steam"],
+    marketplaceLive:Boolean(process.env.DRIFFLE_API_KEY),
+    playstationLive:Boolean(process.env.PLATPRICES_API_KEY),
+    xboxLive:false
+  });
+});
+app.get("/health",(req,res)=>res.json({ok:true,name:"Deals4Gamerz"}));
 app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
 app.listen(PORT,"0.0.0.0",()=>console.log("Deals4Gamerz listening on "+PORT));
