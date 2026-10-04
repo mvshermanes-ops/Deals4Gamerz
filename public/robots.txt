@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://deals4gamerz.onrender.com/sitemap.xml
